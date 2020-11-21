@@ -1,0 +1,107 @@
+import static org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+
+group 'io.twasyl.modules-test-fixtures'
+version '1.0-SNAPSHOT'
+
+allprojects {
+    repositories {
+        jcenter()
+    }
+}
+
+subprojects {
+    plugins.apply(IdeaPlugin)
+
+    def moduleName = project.name.replace("-", ".")
+
+    plugins.withType(JavaPlugin).configureEach {
+        project.extensions.getByType(JavaPluginExtension).toolchain {
+            languageVersion.set(JavaLanguageVersion.of(15))
+        }
+
+        sourceSets {
+            main {
+                output.resourcesDir = "$buildDir/classes/java/main"
+            }
+
+            integrationTest {
+                compileClasspath += sourceSets.main.output
+                runtimeClasspath += sourceSets.main.output
+            }
+        }
+
+        configurations {
+            integrationTestImplementation.extendsFrom implementation
+            integrationTestRuntimeOnly.extendsFrom runtimeOnly
+        }
+
+        dependencies {
+            testImplementation "org.junit.jupiter:junit-jupiter-api:5.7.0"
+            testImplementation "org.junit.jupiter:junit-jupiter-params:5.7.0"
+            testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.7.0"
+
+            integrationTestImplementation "org.junit.jupiter:junit-jupiter-api:5.7.0"
+            integrationTestImplementation "org.junit.jupiter:junit-jupiter-params:5.7.0"
+            integrationTestRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.7.0"
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            inputs.property("moduleName", moduleName)
+            sourceCompatibility = 15
+            targetCompatibility = 15
+            modularity.inferModulePath = true
+        }
+
+        tasks.named("compileJava", JavaCompile).configure {
+            options.sourcepath = files(sourceSets.main.java.srcDirs, sourceSets.main.resources.srcDirs)
+        }
+
+        tasks.withType(Test).configureEach {
+            inputs.property("moduleName", moduleName)
+            useJUnitPlatform()
+            ignoreFailures = true
+
+        }
+
+        tasks.withType(Jar).configureEach {
+            inputs.property("moduleName", moduleName)
+            duplicatesStrategy = EXCLUDE
+        }
+
+        tasks.register("integrationTest", Test).configure {
+            dependsOn 'jar'
+            description = 'Runs integration tests.'
+            group = 'verification'
+            useJUnitPlatform()
+            testClassesDirs = sourceSets.integrationTest.output.classesDirs
+            classpath = sourceSets.integrationTest.runtimeClasspath
+        }
+
+        tasks.named("check").configure {
+            dependsOn(integrationTest)
+        }
+
+        tasks.register("ideaCleanOutput", Delete) {
+            enabled = idea.module.outputDir.exists() || idea.module.testOutputDir.exists()
+            delete = [idea.module.outputDir, idea.module.testOutputDir]
+        }
+
+        idea {
+            module {
+                outputDir = file("out${File.separator}production${File.separator}${moduleName}")
+                testOutputDir = file("out${File.separator}test${File.separator}${moduleName}")
+
+                testSourceDirs += project.sourceSets.integrationTest.java.srcDirs
+                testResourceDirs += project.sourceSets.integrationTest.resources.srcDirs
+            }
+        }
+    }
+
+    plugins.withType(JavaTestFixturesPlugin).configureEach {
+        dependencies {
+            testFixturesImplementation "org.junit.jupiter:junit-jupiter-api:5.7.0"
+            testFixturesImplementation "org.junit.jupiter:junit-jupiter-params:5.7.0"
+            testFixturesRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.7.0"
+        }
+    }
+}

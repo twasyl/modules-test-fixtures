@@ -1,0 +1,3 @@
+rootProject.name = 'modules-test-fixtures'
+
+include 'module-a', 'module-b'
